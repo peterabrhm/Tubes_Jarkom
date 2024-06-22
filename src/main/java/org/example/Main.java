@@ -4,6 +4,38 @@ import java.awt.event.*;
 import java.util.*;
 import java.awt.*;
 import java.sql.*;
+import java.io.*;
+import java.net.*;
+
+class ChatRoom {
+    private String name;
+    private String status;
+    private String password;
+    private int maxParticipants;
+
+    public ChatRoom(String name, String status, String password, int maxParticipants) {
+        this.name = name;
+        this.status = status;
+        this.password = password;
+        this.maxParticipants = maxParticipants;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public int getMaxParticipants() {
+        return maxParticipants;
+    }
+}
 
 public class Main {
     private static Map<String, String> users = new HashMap<>();
@@ -14,8 +46,40 @@ public class Main {
     private static String currentUser;
     private static Connection conn;
 
-    public static void main(String[] args) {
+    private static Socket socket;
+    private static PrintWriter out;
+    private static BufferedReader in;
 
+    private static void connectToServer() {
+        String serverAddress = "127.0.0.1"; // or the appropriate server address
+        int port = 12345; // or the appropriate port number
+
+        try {
+            socket = new Socket(serverAddress, port);
+            out = new PrintWriter(socket.getOutputStream(), true);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            System.out.println("Connected to the server!");
+
+            // Start a thread to read messages from the server
+//            new Thread(new Runnable() {
+//                public void run() {
+//                    try {
+//                        String message;
+//                        while ((message = in.readLine()) != null) {
+//                            System.out.println("Server: " + message);
+//                        }
+//                    } catch (IOException e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//            }).start();
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("Failed to connect to the server.");
+        }
+    }
+
+    public static void main(String[] args) {
         try {
             conn = DatabaseUtil.getConnection();
         } catch (SQLException e) {
@@ -64,7 +128,6 @@ public class Main {
         }
     }
 
-
     private static boolean loginUser(String username, String password) {
         String query = "SELECT * FROM users WHERE username = ? AND password = ?";
 
@@ -72,7 +135,15 @@ public class Main {
             stmt.setString(1, username);
             stmt.setString(2, password);
             ResultSet rs = stmt.executeQuery();
-            return rs.next();
+            boolean loginSuccess = rs.next();
+
+            if (loginSuccess) {
+                currentUser = username;
+                connectToServer();
+                return true;
+            } else {
+                return false;
+            }
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -226,7 +297,6 @@ public class Main {
                 }
             }
         });
-
     }
 
     private static void showMainMenu() {
@@ -239,120 +309,6 @@ public class Main {
         JPanel mainMenuPanel = new JPanel();
         mainMenuPanel.setLayout(new BoxLayout(mainMenuPanel, BoxLayout.Y_AXIS));
         mainMenuFrame.add(mainMenuPanel);
-
-        JButton createRoomButton = new JButton("Create New Room");
-        createRoomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
-        mainMenuPanel.add(createRoomButton);
-
-        createRoomButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                showCreateRoomFrame(mainMenuFrame);
-            }
-        });
-
-        refreshMainMenu(mainMenuPanel, mainMenuFrame);
-
-        mainMenuFrame.setVisible(true);
-    }
-
-
-
-
-    private static void showCreateRoomFrame(JFrame mainMenuFrame) {
-        // Create the create room frame
-        JFrame createRoomFrame = new JFrame("Create New Room");
-        createRoomFrame.setSize(400, 300);
-        createRoomFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        createRoomFrame.setLocationRelativeTo(mainMenuFrame);
-
-        // Create create room panel
-        JPanel createRoomPanel = new JPanel();
-        createRoomPanel.setLayout(null);
-        createRoomFrame.add(createRoomPanel);
-
-        JLabel roomNameLabel = new JLabel("Room Name");
-        roomNameLabel.setBounds(10, 20, 80, 25);
-        createRoomPanel.add(roomNameLabel);
-
-        JTextField roomNameText = new JTextField(20);
-        roomNameText.setBounds(100, 20, 165, 25);
-        createRoomPanel.add(roomNameText);
-
-        JLabel statusLabel = new JLabel("Status");
-        statusLabel.setBounds(10, 50, 80, 25);
-        createRoomPanel.add(statusLabel);
-
-        JComboBox<String> statusComboBox =
-                new JComboBox<>(new String[] {"open", "restricted", "closed"});
-        statusComboBox.setBounds(100, 50, 165, 25);
-        createRoomPanel.add(statusComboBox);
-
-        JLabel passwordLabel = new JLabel("Password");
-        passwordLabel.setBounds(10, 80, 80, 25);
-        createRoomPanel.add(passwordLabel);
-
-        JPasswordField passwordText = new JPasswordField(20);
-        passwordText.setBounds(100, 80, 165, 25);
-        createRoomPanel.add(passwordText);
-        passwordText.setEnabled(false);
-
-        statusComboBox.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                String status = (String) statusComboBox.getSelectedItem();
-                passwordText.setEnabled("restricted".equals(status));
-            }
-        });
-
-        JLabel maxParticipantsLabel = new JLabel("Max Participants");
-        maxParticipantsLabel.setBounds(10, 110, 120, 25);
-        createRoomPanel.add(maxParticipantsLabel);
-
-        JTextField maxParticipantsText = new JTextField(20);
-        maxParticipantsText.setBounds(140, 110, 165, 25);
-        createRoomPanel.add(maxParticipantsText);
-
-        JButton createRoomButton = new JButton("Create Room");
-        createRoomButton.setBounds(10, 140, 150, 25);
-        createRoomPanel.add(createRoomButton);
-
-        createRoomButton.addActionListener(new ActionListener() {
-            public void actionPerformed(ActionEvent e) {
-                String roomName = roomNameText.getText();
-                String status = (String) statusComboBox.getSelectedItem();
-                String password = new String(passwordText.getPassword());
-                int maxParticipants = MAX_PARTICIPANTS_DEFAULT;
-
-                try {
-                    maxParticipants = Integer.parseInt(maxParticipantsText.getText());
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(createRoomPanel,
-                            "Invalid number for max participants. Using default value.");
-                }
-
-                if (roomName.isEmpty()) {
-                    JOptionPane.showMessageDialog(createRoomPanel, "Room name cannot be empty.");
-                } else {
-                    try {
-                        createChatRoom(roomName, status, password, maxParticipants);
-                        userRooms.get(currentUser).add(roomName);
-                        JOptionPane.showMessageDialog(createRoomPanel,
-                                "Room created successfully.");
-                        createRoomFrame.dispose();
-                        refreshMainMenu((JPanel) mainMenuFrame.getContentPane(), mainMenuFrame);
-                    } catch (SQLException ex) {
-                        JOptionPane.showMessageDialog(createRoomPanel,
-                                "Room creation failed: " + ex.getMessage());
-                    }
-                }
-            }
-        });
-
-        createRoomFrame.setVisible(true);
-    }
-
-
-    private static void refreshMainMenu(JPanel mainMenuPanel, JFrame mainMenuFrame) {
-        mainMenuPanel.removeAll();
 
         JButton createRoomButton = new JButton("Create New Room");
         createRoomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
@@ -389,57 +345,178 @@ public class Main {
             }
         }
 
+        // Fetch and display all available rooms from the server
+        mainMenuPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        JLabel availableRoomsLabel = new JLabel("Available Rooms");
+        availableRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
+        mainMenuPanel.add(availableRoomsLabel);
+
+        java.util.List<String> availableRooms = fetchChatRooms();
+        if (availableRooms.isEmpty()) {
+            JLabel noAvailableRoomsLabel = new JLabel("No rooms available.");
+            noAvailableRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
+            mainMenuPanel.add(noAvailableRoomsLabel);
+        } else {
+            for (String room : availableRooms) {
+                JButton roomButton = new JButton(room);
+                roomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+                mainMenuPanel.add(roomButton);
+                roomButton.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        showChatRoom(room);
+                    }
+                });
+            }
+        }
+
         mainMenuFrame.revalidate();
         mainMenuFrame.repaint();
+        mainMenuFrame.setVisible(true);
     }
 
+    private static java.util.List<String> fetchChatRooms() {
+        java.util.List<String> chatRooms = new ArrayList<>();
+        String query = "SELECT name FROM chat_rooms";
+
+        try (Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(query)) {
+            while (rs.next()) {
+                chatRooms.add(rs.getString("name"));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return chatRooms;
+    }
+
+    private static void showCreateRoomFrame(JFrame mainMenuFrame) {
+        // Create the new room frame
+        JFrame createRoomFrame = new JFrame("Create New Room");
+        createRoomFrame.setSize(400, 300);
+        createRoomFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        createRoomFrame.setLocationRelativeTo(mainMenuFrame);
+
+        // Create new room panel
+        JPanel createRoomPanel = new JPanel();
+        createRoomFrame.add(createRoomPanel);
+        placeCreateRoomComponents(createRoomPanel, createRoomFrame);
+
+        createRoomFrame.setVisible(true);
+    }
+
+    private static void placeCreateRoomComponents(JPanel panel, JFrame createRoomFrame) {
+        panel.setLayout(null);
+
+        JLabel nameLabel = new JLabel("Room Name");
+        nameLabel.setBounds(10, 20, 80, 25);
+        panel.add(nameLabel);
+
+        JTextField nameText = new JTextField(20);
+        nameText.setBounds(100, 20, 165, 25);
+        panel.add(nameText);
+
+        JLabel statusLabel = new JLabel("Status");
+        statusLabel.setBounds(10, 50, 80, 25);
+        panel.add(statusLabel);
+
+        JComboBox<String> statusComboBox = new JComboBox<>(new String[]{"Public", "Private"});
+        statusComboBox.setBounds(100, 50, 165, 25);
+        panel.add(statusComboBox);
+
+        JLabel passwordLabel = new JLabel("Password");
+        passwordLabel.setBounds(10, 80, 80, 25);
+        panel.add(passwordLabel);
+
+        JPasswordField passwordText = new JPasswordField(20);
+        passwordText.setBounds(100, 80, 165, 25);
+        panel.add(passwordText);
+
+        JLabel maxParticipantsLabel = new JLabel("Max Participants");
+        maxParticipantsLabel.setBounds(10, 110, 120, 25);
+        panel.add(maxParticipantsLabel);
+
+        JTextField maxParticipantsText = new JTextField(String.valueOf(MAX_PARTICIPANTS_DEFAULT));
+        maxParticipantsText.setBounds(130, 110, 135, 25);
+        panel.add(maxParticipantsText);
+
+        JButton createButton = new JButton("Create Room");
+        createButton.setBounds(10, 140, 150, 25);
+        panel.add(createButton);
+
+        createButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String name = nameText.getText();
+                String status = (String) statusComboBox.getSelectedItem();
+                String password = new String(passwordText.getPassword());
+                int maxParticipants;
+                try {
+                    maxParticipants = Integer.parseInt(maxParticipantsText.getText());
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(panel, "Invalid number for max participants.");
+                    return;
+                }
+
+                try {
+                    createChatRoom(name, status, password, maxParticipants);
+                    chatRooms.add(new ChatRoom(name, status, password, maxParticipants));
+                    JOptionPane.showMessageDialog(panel, "Room created successfully.");
+                    createRoomFrame.dispose();
+                } catch (SQLException ex) {
+                    JOptionPane.showMessageDialog(panel, "Failed to create room: " + ex.getMessage());
+                }
+            }
+        });
+    }
 
     private static void showChatRoom(String roomName) {
-        // Implement chat room window
-        JFrame chatRoomFrame = new JFrame("Chat Room - " + roomName);
-        chatRoomFrame.setSize(400, 300);
+        JFrame chatRoomFrame = new JFrame("Chat Room: " + roomName);
+        chatRoomFrame.setSize(500, 400);
         chatRoomFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         chatRoomFrame.setLocationRelativeTo(null);
 
-        // Add components to the chat room frame
         JPanel chatRoomPanel = new JPanel();
+        chatRoomPanel.setLayout(new BorderLayout());
         chatRoomFrame.add(chatRoomPanel);
-        chatRoomPanel.setLayout(new BoxLayout(chatRoomPanel, BoxLayout.Y_AXIS));
 
-        JLabel roomLabel = new JLabel("Welcome to " + roomName);
-        roomLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
-        chatRoomPanel.add(roomLabel);
+        JTextArea chatArea = new JTextArea();
+        chatArea.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(chatArea);
+        chatRoomPanel.add(scrollPane, BorderLayout.CENTER);
+
+        JTextField messageField = new JTextField();
+        chatRoomPanel.add(messageField, BorderLayout.SOUTH);
+
+        messageField.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String message = messageField.getText();
+//                chatArea.append(currentUser + ": " + message + "\n");
+                messageField.setText("");
+                // Send message to the server here
+                out.println(currentUser + ": " + message);
+            }
+        });
 
         chatRoomFrame.setVisible(true);
+
+        // Thread to read messages from the server and update the chat area
+        new Thread(new Runnable() {
+            public void run() {
+                try {
+                    String message;
+                    while ((message = in.readLine()) != null) {
+                        final String finalMessage = message;
+                        SwingUtilities.invokeLater(new Runnable() {
+                            public void run() {
+                                chatArea.append(finalMessage + "\n");
+                            }
+                        });
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
     }
 
-    static class ChatRoom {
-        private String name;
-        private String status;
-        private String password;
-        private int maxParticipants;
 
-        public ChatRoom(String name, String status, String password, int maxParticipants) {
-            this.name = name;
-            this.status = status;
-            this.password = password;
-            this.maxParticipants = maxParticipants;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getStatus() {
-            return status;
-        }
-
-        public String getPassword() {
-            return password;
-        }
-
-        public int getMaxParticipants() {
-            return maxParticipants;
-        }
-    }
 }

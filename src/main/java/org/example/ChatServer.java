@@ -4,12 +4,13 @@ import java.net.*;
 import java.util.*;
 
 public class ChatServer {
-    private static final int PORT = 12345;
     private static Set<PrintWriter> clientWriters = new HashSet<>();
 
     public static void main(String[] args) {
         System.out.println("Chat server started...");
-        try (ServerSocket serverSocket = new ServerSocket(PORT)) {
+        int port = 12345;
+
+        try (ServerSocket serverSocket = new ServerSocket(port)) {
             while (true) {
                 new ClientHandler(serverSocket.accept()).start();
             }
@@ -39,11 +40,7 @@ public class ChatServer {
                 String message;
                 while ((message = in.readLine()) != null) {
                     System.out.println("Received: " + message);
-                    synchronized (clientWriters) {
-                        for (PrintWriter writer : clientWriters) {
-                            writer.println(message);
-                        }
-                    }
+                    broadcastMessage(message);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -53,10 +50,22 @@ public class ChatServer {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+
                 synchronized (clientWriters) {
                     clientWriters.remove(out);
                 }
             }
         }
+
+        private void broadcastMessage(String message) {
+            synchronized (clientWriters) {
+                for (PrintWriter writer : clientWriters) {
+                    writer.println(message);
+                    writer.flush(); // Ensure message is sent immediately
+                }
+            }
+        }
     }
+
+
 }
