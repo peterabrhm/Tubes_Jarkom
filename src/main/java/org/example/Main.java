@@ -12,6 +12,8 @@ class ChatRoom {
     private String status;
     private String password;
     private int maxParticipants;
+    private int participantsCount;
+    private boolean userJoined; // New field
 
     public ChatRoom(String name, String status, String password, int maxParticipants) {
         this.name = name;
@@ -20,6 +22,7 @@ class ChatRoom {
         this.maxParticipants = maxParticipants;
     }
 
+    // getters and setters
     public String getName() {
         return name;
     }
@@ -35,7 +38,24 @@ class ChatRoom {
     public int getMaxParticipants() {
         return maxParticipants;
     }
+
+    public int getParticipantsCount() {
+        return participantsCount;
+    }
+
+    public void setParticipantsCount(int participantsCount) {
+        this.participantsCount = participantsCount;
+    }
+
+    public boolean isUserJoined() {
+        return userJoined;
+    }
+
+    public void setUserJoined(boolean userJoined) {
+        this.userJoined = userJoined;
+    }
 }
+
 
 public class Main {
     private static Map<String, String> users = new HashMap<>();
@@ -300,15 +320,14 @@ public class Main {
     }
 
     private static void showMainMenu() {
-        // Main chat application window (after login)
         JFrame mainMenuFrame = new JFrame("Main Menu");
-        mainMenuFrame.setSize(400, 300);
+        mainMenuFrame.setSize(600, 400);
         mainMenuFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         mainMenuFrame.setLocationRelativeTo(null);
 
         JPanel mainMenuPanel = new JPanel();
         mainMenuPanel.setLayout(new BoxLayout(mainMenuPanel, BoxLayout.Y_AXIS));
-        mainMenuFrame.add(mainMenuPanel);
+        mainMenuFrame.add(new JScrollPane(mainMenuPanel));
 
         JButton createRoomButton = new JButton("Create New Room");
         createRoomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
@@ -326,53 +345,63 @@ public class Main {
         joinedRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
         mainMenuPanel.add(joinedRoomsLabel);
 
-        Set<String> joinedRooms = userRooms.get(currentUser);
+        JPanel joinedRoomsPanel = new JPanel();
+        joinedRoomsPanel.setLayout(new BoxLayout(joinedRoomsPanel, BoxLayout.Y_AXIS));
+        mainMenuPanel.add(joinedRoomsPanel);
 
-        if (joinedRooms == null || joinedRooms.isEmpty()) {
-            JLabel noRoomsLabel = new JLabel("No rooms joined yet.");
-            noRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
-            mainMenuPanel.add(noRoomsLabel);
-        } else {
-            for (String room : joinedRooms) {
-                JButton roomButton = new JButton(room);
-                roomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
-                mainMenuPanel.add(roomButton);
-                roomButton.addActionListener(new ActionListener() {
-                    public void actionPerformed(ActionEvent e) {
-                        showChatRoom(room);
-                    }
-                });
-            }
-        }
-
-        // Fetch and display all available rooms from the server
-        mainMenuPanel.add(Box.createRigidArea(new Dimension(0, 10)));
         JLabel availableRoomsLabel = new JLabel("Available Rooms");
         availableRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
         mainMenuPanel.add(availableRoomsLabel);
 
-        java.util.List<String> availableRooms = fetchChatRooms();
-        if (availableRooms.isEmpty()) {
-            JLabel noAvailableRoomsLabel = new JLabel("No rooms available.");
-            noAvailableRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
-            mainMenuPanel.add(noAvailableRoomsLabel);
-        } else {
-            for (String room : availableRooms) {
-                JButton roomButton = new JButton(room);
-                roomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
-                mainMenuPanel.add(roomButton);
-                roomButton.addActionListener(new ActionListener() {
-                    public void actionPerformed(ActionEvent e) {
-                        showChatRoom(room);
-                    }
-                });
+        JPanel availableRoomsPanel = new JPanel();
+        availableRoomsPanel.setLayout(new BoxLayout(availableRoomsPanel, BoxLayout.Y_AXIS));
+        mainMenuPanel.add(availableRoomsPanel);
+
+        java.util.List<ChatRoom> chatRooms = fetchChatRoomsWithDetails();
+
+        for (ChatRoom room : chatRooms) {
+            JPanel roomPanel = new JPanel();
+            roomPanel.setLayout(new BoxLayout(roomPanel, BoxLayout.Y_AXIS));
+            roomPanel.setBorder(BorderFactory.createTitledBorder(room.getName()));
+
+            JLabel roomDetails = new JLabel("Type: " + room.getStatus() +
+                    ", Participants: " + room.getParticipantsCount() +
+                    "/" + room.getMaxParticipants());
+            roomDetails.setAlignmentX(JLabel.CENTER_ALIGNMENT);
+            roomPanel.add(roomDetails);
+
+            JButton actionButton = new JButton(room.isUserJoined() ? "Enter" : "Join");
+            actionButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+            actionButton.addActionListener(new ActionListener() {
+                public void actionPerformed(ActionEvent e) {
+                    joinChatRoom(room);
+                }
+            });
+
+            roomPanel.add(actionButton);
+
+            if (room.isUserJoined()) {
+                joinedRoomsPanel.add(roomPanel);
+            } else {
+                availableRoomsPanel.add(roomPanel);
             }
         }
 
-        mainMenuFrame.revalidate();
-        mainMenuFrame.repaint();
+        if (joinedRoomsPanel.getComponentCount() == 0) {
+            JLabel noJoinedRoomsLabel = new JLabel("No joined rooms.");
+            noJoinedRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
+            joinedRoomsPanel.add(noJoinedRoomsLabel);
+        }
+
+        if (availableRoomsPanel.getComponentCount() == 0) {
+            JLabel noAvailableRoomsLabel = new JLabel("No rooms available.");
+            noAvailableRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
+            availableRoomsPanel.add(noAvailableRoomsLabel);
+        }
+
         mainMenuFrame.setVisible(true);
     }
+
 
     private static java.util.List<String> fetchChatRooms() {
         java.util.List<String> chatRooms = new ArrayList<>();
@@ -388,6 +417,61 @@ public class Main {
         }
         return chatRooms;
     }
+
+    private static java.util.List<ChatRoom> fetchChatRoomsWithDetails() {
+        java.util.List<ChatRoom> chatRooms = new ArrayList<>();
+        String query = "SELECT cr.name, cr.status, cr.max_participants, " +
+                "(SELECT COUNT(*) FROM room_participants rp WHERE rp.room_id = cr.id) AS participants_count, " +
+                "EXISTS (SELECT 1 FROM room_participants rp WHERE rp.room_id = cr.id AND rp.username = ?) AS user_joined " +
+                "FROM chat_rooms cr";
+
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, currentUser);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String name = rs.getString("name");
+                String status = rs.getString("status");
+                int maxParticipants = rs.getInt("max_participants");
+                int participantsCount = rs.getInt("participants_count");
+                boolean userJoined = rs.getBoolean("user_joined");
+
+                ChatRoom room = new ChatRoom(name, status, null, maxParticipants);
+                room.setParticipantsCount(participantsCount);
+                room.setUserJoined(userJoined);
+                chatRooms.add(room);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return chatRooms;
+    }
+
+    private static void joinChatRoom(ChatRoom room) {
+        if ("Private".equals(room.getStatus())) {
+            String password = JOptionPane.showInputDialog("Enter password for " + room.getName());
+            if (password == null || !room.getPassword().equals(password.trim())) {
+                JOptionPane.showMessageDialog(null, "Incorrect password or canceled.");
+                return;
+            }
+        }
+
+        // Add the current user to the room participants in the database
+        String query = "INSERT INTO room_participants (room_id, username) VALUES ((SELECT id FROM chat_rooms WHERE name = ?), ?)";
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, room.getName());
+            stmt.setString(2, currentUser);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        // Update local userRooms map
+        userRooms.computeIfAbsent(currentUser, k -> new HashSet<>()).add(room.getName());
+
+        // Show the chat room
+        showChatRoom(room.getName());
+    }
+
 
     private static void showCreateRoomFrame(JFrame mainMenuFrame) {
         // Create the new room frame
@@ -443,6 +527,10 @@ public class Main {
         createButton.setBounds(10, 140, 150, 25);
         panel.add(createButton);
 
+        // Disable password text field initially since the default is "Public"
+        passwordText.setEnabled(false);
+
+        // Add ActionListener to handle room creation
         createButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 String name = nameText.getText();
@@ -457,16 +545,39 @@ public class Main {
                 }
 
                 try {
+                    if ("Public".equals(status)) {
+                        password = null; // Set password to null for public rooms
+                    }
                     createChatRoom(name, status, password, maxParticipants);
                     chatRooms.add(new ChatRoom(name, status, password, maxParticipants));
                     JOptionPane.showMessageDialog(panel, "Room created successfully.");
                     createRoomFrame.dispose();
+                    SwingUtilities.invokeLater(new Runnable() {
+                        public void run() {
+                            showMainMenu(); // Refresh main menu after creating room
+                        }
+                    });
                 } catch (SQLException ex) {
                     JOptionPane.showMessageDialog(panel, "Failed to create room: " + ex.getMessage());
                 }
             }
         });
+
+        // Disable/Enable password text field based on the selected status
+        statusComboBox.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String selectedStatus = (String) statusComboBox.getSelectedItem();
+                if ("Public".equals(selectedStatus)) {
+                    passwordText.setEnabled(false); // Disable password field
+                    passwordText.setText(""); // Clear the password field
+                } else {
+                    passwordText.setEnabled(true); // Enable password field
+                }
+            }
+        });
     }
+
+
 
     private static void showChatRoom(String roomName) {
         JFrame chatRoomFrame = new JFrame("Chat Room: " + roomName);
