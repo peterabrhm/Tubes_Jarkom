@@ -455,8 +455,24 @@ public class Main {
             }
         }
 
+        // Check if the user is already a participant of the room
+        String checkQuery = "SELECT COUNT(*) FROM room_participants WHERE room_id = (SELECT id FROM chat_rooms WHERE name = ? LIMIT 1) AND username = ?";
+        try (PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
+            checkStmt.setString(1, room.getName());
+            checkStmt.setString(2, currentUser);
+            ResultSet rs = checkStmt.executeQuery();
+            if (rs.next() && rs.getInt(1) > 0) {
+                // User is already a participant of the room
+                JOptionPane.showMessageDialog(null, "You are already a participant of this room.");
+                showChatRoom(room.getName());
+                return;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
         // Add the current user to the room participants in the database
-        String query = "INSERT INTO room_participants (room_id, username) VALUES ((SELECT id FROM chat_rooms WHERE name = ?), ?)";
+        String query = "INSERT INTO room_participants (room_id, username) VALUES ((SELECT id FROM chat_rooms WHERE name = ? LIMIT 1), ?)";
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, room.getName());
             stmt.setString(2, currentUser);
