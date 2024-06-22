@@ -1,4 +1,5 @@
 package org.example;
+
 import javax.swing.*;
 import java.awt.event.*;
 import java.util.*;
@@ -49,7 +50,7 @@ public class Main {
     }
 
     private static void createChatRoom(String name, String status, String password,
-                                       int maxParticipants) throws SQLException {
+            int maxParticipants) throws SQLException {
         String query =
                 "INSERT INTO chat_rooms (name, status, password, max_participants) VALUES (?, ?, ?, ?)";
 
@@ -229,6 +230,22 @@ public class Main {
 
     }
 
+    private static String getUserName(String username) throws SQLException {
+        String query = "SELECT username FROM users WHERE username = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, username);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString("username");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return null;
+    }
+
     private static void showMainMenu() {
         // Main chat application window (after login)
         JFrame mainMenuFrame = new JFrame("Main Menu");
@@ -254,7 +271,6 @@ public class Main {
 
         mainMenuFrame.setVisible(true);
     }
-
 
 
 
@@ -353,6 +369,25 @@ public class Main {
 
     private static void refreshMainMenu(JPanel mainMenuPanel, JFrame mainMenuFrame) {
         mainMenuPanel.removeAll();
+
+        // Add Profile button to top right corner
+        JButton profileButton = new JButton("View Profile");
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setLayout(new FlowLayout(FlowLayout.RIGHT));
+        buttonPanel.add(profileButton);
+        mainMenuPanel.add(buttonPanel, BorderLayout.NORTH);
+
+        profileButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                String name = null;
+                try {
+                    name = getUserName(currentUser);
+                } catch (SQLException ex) {
+                    ex.printStackTrace();
+                }
+                JOptionPane.showMessageDialog(mainMenuPanel, "Welcome, " + name + "!");
+            }
+        });
 
         JButton createRoomButton = new JButton("Create New Room");
         createRoomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
