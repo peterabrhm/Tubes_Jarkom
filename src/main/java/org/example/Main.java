@@ -293,12 +293,12 @@ public class Main {
         // Create login panel
         JPanel loginPanel = new JPanel();
         loginFrame.add(loginPanel);
-        placeLoginComponents(loginPanel, loginFrame);
+        placeLoginComponents(loginPanel, loginFrame, mainFrame);
 
         loginFrame.setVisible(true);
     }
 
-    private static void placeLoginComponents(JPanel panel, JFrame loginFrame) {
+    private static void placeLoginComponents(JPanel panel, JFrame loginFrame, JFrame mainFrame) {
         panel.setLayout(null);
 
         JLabel userLabel = new JLabel("Username");
@@ -336,7 +336,9 @@ public class Main {
                         loginFrame.dispose();
                         SwingUtilities.invokeLater(new Runnable() {
                             public void run() {
+                                loginFrame.dispatchEvent(new WindowEvent(loginFrame, WindowEvent.WINDOW_CLOSING));
                                 showMainMenu(); // Call to display the main menu
+                                mainFrame.setVisible(false);
                             }
                         });
                     } else {
@@ -375,6 +377,8 @@ public class Main {
         createRoomButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 showCreateRoomFrame(mainMenuFrame);
+//                mainMenuFrame.dispatchEvent(new WindowEvent(mainMenuFrame, WindowEvent.WINDOW_CLOSING));
+                mainMenuFrame.setVisible(false);
             }
         });
 
@@ -417,7 +421,9 @@ public class Main {
                 deleteRoomButton.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
                         deleteChatRoom(room.getName());
+                        out.println("Kick @");
                         chatRooms.remove(room);
+                        mainMenuFrame.setVisible(false);
                         showMainMenu();
                     }
                 });
@@ -430,6 +436,9 @@ public class Main {
                         String participant = JOptionPane.showInputDialog(mainMenuFrame, "Enter participant's username to remove:");
                         if (participant != null && !participant.isEmpty()) {
                             removeParticipantFromRoom(room.getName(), participant);
+                            out.println("Kick " + participant);
+                            mainMenuFrame.setVisible(false);
+                            showMainMenu();
                         }
                     }
                 });
@@ -573,7 +582,7 @@ public class Main {
         JOptionPane.showMessageDialog(null, "You have joined the room: " + room.getName());
 
         // Refresh the main menu
-        showMainMenu();
+//        showMainMenu();
     }
 
 
@@ -587,12 +596,12 @@ public class Main {
         // Create new room panel
         JPanel createRoomPanel = new JPanel();
         createRoomFrame.add(createRoomPanel);
-        placeCreateRoomComponents(createRoomPanel, createRoomFrame);
+        placeCreateRoomComponents(createRoomPanel, createRoomFrame, mainMenuFrame);
 
         createRoomFrame.setVisible(true);
     }
 
-    private static void placeCreateRoomComponents(JPanel panel, JFrame createRoomFrame) {
+    private static void placeCreateRoomComponents(JPanel panel, JFrame createRoomFrame, JFrame mainMenuFrame) {
         panel.setLayout(null);
 
         JLabel nameLabel = new JLabel("Room Name");
@@ -658,7 +667,9 @@ public class Main {
                     chatRooms.add(new ChatRoom(name, status, password, maxParticipants, roomOwner));
                     JOptionPane.showMessageDialog(panel, "Room created successfully and joined.");
                     createRoomFrame.dispose();
+                    createRoomFrame.dispatchEvent(new WindowEvent(createRoomFrame, WindowEvent.WINDOW_CLOSING));
                     showMainMenu(); // Refresh main menu after creating and joining room
+//                    mainMenuFrame.dispatchEvent(new WindowEvent(mainMenuFrame, WindowEvent.WINDOW_CLOSING));
                 } catch (SQLException ex) {
                     JOptionPane.showMessageDialog(panel, "Failed to create room: " + ex.getMessage());
                 }
@@ -712,6 +723,7 @@ public class Main {
             public void actionPerformed(ActionEvent e) {
                 leaveChatRoom(roomName, currentUser);
                 chatRoomFrame.dispose();
+                chatRoomFrame.dispatchEvent(new WindowEvent(chatRoomFrame, WindowEvent.WINDOW_CLOSING));
                 showMainMenu();
             }
         });
@@ -732,6 +744,7 @@ public class Main {
         backButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 chatRoomFrame.dispose();
+                chatRoomFrame.dispatchEvent(new WindowEvent(chatRoomFrame, WindowEvent.WINDOW_CLOSING));
                 showMainMenu(); // Go back to main menu
             }
         });
@@ -781,6 +794,15 @@ public class Main {
                 try {
                     String message;
                     while ((message = in.readLine()) != null) {
+                        String[] participant = message.split(" ");
+                        if(participant[0].equals("Kick")) {
+                            if (participant[1].equals(currentUser) || participant[1].equals("@")) {
+                                chatRoomFrame.dispatchEvent(new WindowEvent(chatRoomFrame, WindowEvent.WINDOW_CLOSING));
+                                showMainMenu();
+                                break;
+                            }
+                        }
+
                         if (!message.startsWith(currentUser + ":")) {
                             chatArea.append(message + "\n");
                         }
@@ -792,6 +814,27 @@ public class Main {
         }).start();
 
         chatRoomFrame.setVisible(true);
+    }
+
+    private static java.util.List loadMessage(String roomName) {
+        String queryLoadMessage = "SELECT * FROM pesan WHERE id_room = (SELECT id FROM chat_rooms WHERE name = ?)";
+
+        java.util.List<String> messages = new ArrayList<>();
+
+        try (PreparedStatement stmt = conn.prepareStatement(queryLoadMessage)) {
+            stmt.setString(1, roomName);
+            ResultSet rs = stmt.executeQuery();
+
+            while (rs.next()) {
+                String message = rs.getString("chat");
+                String sender = rs.getString("username");
+                messages.add(sender + ": " + message);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return messages;
     }
 
     private static void deleteChatRoom(String roomName) {
@@ -811,6 +854,8 @@ public class Main {
                 int rowsAffected = stmtDeleteRoom.executeUpdate();
 
                 if (rowsAffected > 0) {
+                    // Notify all clients about the room deletion
+//                    ChatServer.broadcastMessage("ROOM_DELETED:" + roomName);
                     JOptionPane.showMessageDialog(null, "Room " + roomName + " deleted successfully.");
                     conn.commit(); // Commit the transaction
                 } else {
@@ -841,9 +886,15 @@ public class Main {
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, roomName);
             stmt.setString(2, participant);
-            stmt.executeUpdate();
+            int rowsAffected = stmt.executeUpdate();
 
-            JOptionPane.showMessageDialog(null, "Participant " + participant + " removed from room " + roomName + " successfully.");
+            if (rowsAffected > 0) {
+                // Notify the specific participant about their removal
+//                ChatServer.broadcastMessage("PARTICIPANT_REMOVED:" + roomName + ":" + participant);
+                JOptionPane.showMessageDialog(null, "Participant " + participant + " removed from room " + roomName + " successfully.");
+            } else {
+                JOptionPane.showMessageDialog(null, "Failed to remove participant: participant not found.");
+            }
         } catch (SQLException e) {
             e.printStackTrace();
             JOptionPane.showMessageDialog(null, "Failed to remove participant: " + e.getMessage());

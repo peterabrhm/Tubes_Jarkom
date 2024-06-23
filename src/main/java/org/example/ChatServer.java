@@ -19,6 +19,15 @@ public class ChatServer {
         }
     }
 
+    public static void broadcastMessage(String message) {
+        synchronized (clientWriters) {
+            for (PrintWriter writer : clientWriters) {
+                writer.println(message);
+                writer.flush(); // Ensure message is sent immediately
+            }
+        }
+    }
+
     private static class ClientHandler extends Thread {
         private Socket socket;
         private PrintWriter out;
@@ -40,7 +49,11 @@ public class ChatServer {
                 String message;
                 while ((message = in.readLine()) != null) {
                     System.out.println("Received: " + message);
-                    broadcastMessage(message);
+                    if (message.startsWith("ROOM_DELETED:") || message.startsWith("PARTICIPANT_REMOVED:")) {
+                        handleSpecialMessage(message);
+                    } else {
+                        broadcastMessage(message);
+                    }
                 }
             } catch (IOException e) {
                 e.printStackTrace();
@@ -57,15 +70,8 @@ public class ChatServer {
             }
         }
 
-        private void broadcastMessage(String message) {
-            synchronized (clientWriters) {
-                for (PrintWriter writer : clientWriters) {
-                    writer.println(message);
-                    writer.flush(); // Ensure message is sent immediately
-                }
-            }
+        private void handleSpecialMessage(String message) {
+            broadcastMessage(message);
         }
     }
-
-
 }

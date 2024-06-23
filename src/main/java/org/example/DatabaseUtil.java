@@ -5,7 +5,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 public class DatabaseUtil {
-    private static final String URL = "jdbc:mysql://localhost:3306/db_jarkom"; // Replace with your database name
+    private static final String URL = "jdbc:mysql://localhost:3306/db_jarkom(2)"; // Replace with your database name
     private static final String USER = "netadmin"; // Replace with your MySQL username
     private static final String PASSWORD = ""; // Replace with your MySQL password
 
