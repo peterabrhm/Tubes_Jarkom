@@ -14,12 +14,14 @@ class ChatRoom {
     private int maxParticipants;
     private int participantsCount;
     private boolean userJoined; // New field
+    private String roomOwner;
 
-    public ChatRoom(String name, String status, String password, int maxParticipants) {
+    public ChatRoom(String name, String status, String password, int maxParticipants, String roomOwner) {
         this.name = name;
         this.status = status;
         this.password = password;
         this.maxParticipants = maxParticipants;
+        this.roomOwner = roomOwner;
     }
 
     // getters and setters
@@ -53,6 +55,14 @@ class ChatRoom {
 
     public void setUserJoined(boolean userJoined) {
         this.userJoined = userJoined;
+    }
+
+    public String getRoomOwner() {
+        return roomOwner;
+    }
+
+    public void setRoomOwner(String roomOwner) {
+        this.roomOwner = roomOwner;
     }
 }
 
@@ -151,15 +161,15 @@ public class Main {
     }
 
     private static void createChatRoom(String name, String status, String password,
-                                       int maxParticipants) throws SQLException {
-        String query =
-                "INSERT INTO chat_rooms (name, status, password, max_participants) VALUES (?, ?, ?, ?)";
+                                       int maxParticipants, String roomOwner) throws SQLException {
+        String query = "INSERT INTO chat_rooms (name, status, password, max_participants, room_owner) VALUES (?, ?, ?, ?, ?)";
 
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, name);
             stmt.setString(2, status);
             stmt.setString(3, password);
             stmt.setInt(4, maxParticipants);
+            stmt.setString(5, roomOwner);
             stmt.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -390,6 +400,31 @@ public class Main {
             roomDetails.setAlignmentX(JLabel.CENTER_ALIGNMENT);
             roomPanel.add(roomDetails);
 
+            if (room.getRoomOwner().equals(currentUser)) {
+                JButton deleteRoomButton = new JButton("Delete Room");
+                deleteRoomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+                deleteRoomButton.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        deleteChatRoom(room.getName());
+                        chatRooms.remove(room);
+                        showMainMenu();
+                    }
+                });
+                roomPanel.add(deleteRoomButton);
+
+                JButton removeParticipantButton = new JButton("Remove Participant");
+                removeParticipantButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+                removeParticipantButton.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        String participant = JOptionPane.showInputDialog(mainMenuFrame, "Enter participant's username to remove:");
+                        if (participant != null && !participant.isEmpty()) {
+                            removeParticipantFromRoom(room.getName(), participant);
+                        }
+                    }
+                });
+                roomPanel.add(removeParticipantButton);
+            }
+
             if (room.isUserJoined()) {
                 JButton enterButton = new JButton("Enter");
                 enterButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
@@ -459,7 +494,7 @@ public class Main {
 
     private static java.util.List<ChatRoom> fetchChatRoomsWithDetails() {
         java.util.List<ChatRoom> chatRooms = new ArrayList<>();
-        String query = "SELECT cr.name, cr.status, cr.max_participants, " +
+        String query = "SELECT cr.name, cr.status, cr.max_participants, cr.room_owner, " +
                 "(SELECT COUNT(*) FROM room_participants rp WHERE rp.room_id = cr.id) AS participants_count, " +
                 "EXISTS (SELECT 1 FROM room_participants rp WHERE rp.room_id = cr.id AND rp.username = ?) AS user_joined " +
                 "FROM chat_rooms cr";
@@ -473,8 +508,9 @@ public class Main {
                 int maxParticipants = rs.getInt("max_participants");
                 int participantsCount = rs.getInt("participants_count");
                 boolean userJoined = rs.getBoolean("user_joined");
+                String roomOwner = rs.getString("room_owner");
 
-                ChatRoom room = new ChatRoom(name, status, null, maxParticipants);
+                ChatRoom room = new ChatRoom(name, status, null, maxParticipants, roomOwner);
                 room.setParticipantsCount(participantsCount);
                 room.setUserJoined(userJoined);
                 chatRooms.add(room);
@@ -572,6 +608,7 @@ public class Main {
                 String name = nameText.getText();
                 String status = (String) statusComboBox.getSelectedItem();
                 String password = new String(passwordText.getPassword());
+                String roomOwner = currentUser; // Assuming the current user is the room owner
                 int maxParticipants;
                 try {
                     maxParticipants = Integer.parseInt(maxParticipantsText.getText());
@@ -584,15 +621,12 @@ public class Main {
                     if ("Public".equals(status)) {
                         password = null; // Set password to null for public rooms
                     }
-                    createChatRoom(name, status, password, maxParticipants);
-                    chatRooms.add(new ChatRoom(name, status, password, maxParticipants));
-                    JOptionPane.showMessageDialog(panel, "Room created successfully.");
+                    createChatRoom(name, status, password, maxParticipants, roomOwner);
+                    joinChatRoom(new ChatRoom(name, status, password, maxParticipants, roomOwner));
+                    chatRooms.add(new ChatRoom(name, status, password, maxParticipants, roomOwner));
+                    JOptionPane.showMessageDialog(panel, "Room created successfully and joined.");
                     createRoomFrame.dispose();
-                    SwingUtilities.invokeLater(new Runnable() {
-                        public void run() {
-                            showMainMenu(); // Refresh main menu after creating room
-                        }
-                    });
+                    showMainMenu(); // Refresh main menu after creating and joining room
                 } catch (SQLException ex) {
                     JOptionPane.showMessageDialog(panel, "Failed to create room: " + ex.getMessage());
                 }
@@ -614,11 +648,10 @@ public class Main {
     }
 
 
-
     private static void showChatRoom(String roomName) {
         JFrame chatRoomFrame = new JFrame("Chat Room: " + roomName);
         chatRoomFrame.setSize(600, 400);
-        chatRoomFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        chatRoomFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Dispose on close to prevent exiting the application
         chatRoomFrame.setLocationRelativeTo(null);
 
         JPanel chatRoomPanel = new JPanel();
@@ -629,12 +662,10 @@ public class Main {
         roomLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
         chatRoomPanel.add(roomLabel);
 
-        // Add chat messages display area
         JTextArea chatArea = new JTextArea(15, 50);
         chatArea.setEditable(false);
         chatRoomPanel.add(new JScrollPane(chatArea));
 
-        // Add message input field and send button
         JTextField messageField = new JTextField();
         JButton sendButton = new JButton("Send");
         JPanel messagePanel = new JPanel();
@@ -643,19 +674,17 @@ public class Main {
         messagePanel.add(sendButton);
         chatRoomPanel.add(messagePanel);
 
-        // Add leave room button
         JButton leaveButton = new JButton("Leave Room");
         leaveButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
         leaveButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 leaveChatRoom(roomName, currentUser);
-                chatRoomFrame.dispose();  // Close the chat room window
-                showMainMenu();  // Refresh and show the main menu
+                chatRoomFrame.dispose();
+                showMainMenu();
             }
         });
         chatRoomPanel.add(leaveButton);
 
-        // Add view participants button
         JButton viewParticipantsButton = new JButton("View Participants");
         viewParticipantsButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
         viewParticipantsButton.addActionListener(new ActionListener() {
@@ -665,20 +694,57 @@ public class Main {
         });
         chatRoomPanel.add(viewParticipantsButton);
 
-        // Add action listener for the send button
+
+        JButton backButton = new JButton("Back to Main Menu");
+        backButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+        backButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                chatRoomFrame.dispose();
+                showMainMenu(); // Go back to main menu
+            }
+        });
+        chatRoomPanel.add(backButton);
+
         sendButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 String message = messageField.getText();
                 if (!message.isEmpty()) {
-                    out.println(currentUser + ": " + message); // Send message to server
-                    chatArea.append("Me: " + message + "\n"); // Display message in chat area
-                    messageField.setText(""); // Clear the input field
+                    out.println(currentUser + ": " + message);
+                    chatArea.append("Me: " + message + "\n");
+                    messageField.setText("");
                 }
             }
         });
 
-        // Start a thread to read messages from the server and update the chat area
-        new Thread(new Runnable() {
+        // Fetch the chat room to get the owner information
+//        ChatRoom room = chatRooms.stream().filter(r -> r.getName().equals(roomName)).findFirst().orElse(null);
+//
+//        if (room != null && room.getRoomOwner().equals(currentUser)) {
+//            JButton deleteRoomButton = new JButton("Delete Room");
+//            deleteRoomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+//            deleteRoomButton.addActionListener(new ActionListener() {
+//                public void actionPerformed(ActionEvent e) {
+//                    deleteChatRoom(roomName);
+//                    chatRoomFrame.dispose();
+//                    showMainMenu();
+//                }
+//            });
+//            chatRoomPanel.add(deleteRoomButton);
+//
+//            JButton removeParticipantButton = new JButton("Remove Participant");
+//            removeParticipantButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+//            removeParticipantButton.addActionListener(new ActionListener() {
+//                public void actionPerformed(ActionEvent e) {
+//                    String participant = JOptionPane.showInputDialog(chatRoomFrame, "Enter participant's username to remove:");
+//                    if (participant != null && !participant.isEmpty()) {
+//                        removeParticipantFromRoom(roomName, participant);
+//                    }
+//                }
+//            });
+//            chatRoomPanel.add(removeParticipantButton);
+//        }
+
+            new Thread(new Runnable() {
             public void run() {
                 try {
                     String message;
@@ -694,6 +760,62 @@ public class Main {
         }).start();
 
         chatRoomFrame.setVisible(true);
+    }
+
+    private static void deleteChatRoom(String roomName) {
+        String queryDeleteParticipants = "DELETE FROM room_participants WHERE room_id = (SELECT id FROM chat_rooms WHERE name = ?)";
+        String queryDeleteRoom = "DELETE FROM chat_rooms WHERE name = ? AND room_owner = ?";
+
+        try {
+            conn.setAutoCommit(false); // Start a transaction
+            try (PreparedStatement stmtDeleteParticipants = conn.prepareStatement(queryDeleteParticipants)) {
+                stmtDeleteParticipants.setString(1, roomName);
+                stmtDeleteParticipants.executeUpdate();
+            }
+
+            try (PreparedStatement stmtDeleteRoom = conn.prepareStatement(queryDeleteRoom)) {
+                stmtDeleteRoom.setString(1, roomName);
+                stmtDeleteRoom.setString(2, currentUser);
+                int rowsAffected = stmtDeleteRoom.executeUpdate();
+
+                if (rowsAffected > 0) {
+                    JOptionPane.showMessageDialog(null, "Room " + roomName + " deleted successfully.");
+                    conn.commit(); // Commit the transaction
+                } else {
+                    JOptionPane.showMessageDialog(null, "Failed to delete room: room not found or you are not the owner.");
+                    conn.rollback(); // Rollback the transaction
+                }
+            }
+        } catch (SQLException e) {
+            try {
+                conn.rollback(); // Rollback the transaction in case of any exception
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(null, "Failed to delete room: " + e.getMessage());
+        } finally {
+            try {
+                conn.setAutoCommit(true); // Reset auto-commit mode
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private static void removeParticipantFromRoom(String roomName, String participant) {
+        String query = "DELETE FROM room_participants WHERE room_id = (SELECT id FROM chat_rooms WHERE name = ?) AND username = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, roomName);
+            stmt.setString(2, participant);
+            stmt.executeUpdate();
+
+            JOptionPane.showMessageDialog(null, "Participant " + participant + " removed from room " + roomName + " successfully.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(null, "Failed to remove participant: " + e.getMessage());
+        }
     }
 
     private static void viewParticipants(String roomName) {
