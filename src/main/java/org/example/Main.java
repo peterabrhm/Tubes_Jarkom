@@ -358,7 +358,7 @@ public class Main {
         mainMenuFrame.add(new JScrollPane(mainMenuPanel));
 
         JButton btnViewProfile = new JButton("View Profile");
-        btnViewProfile.setAlignmentX(JButton.RIGHT);
+        btnViewProfile.setAlignmentX(JButton.CENTER_ALIGNMENT);
         btnViewProfile.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
