@@ -99,13 +99,31 @@ public class Main {
         }
     }
 
+    private static void cleanup() {
+        try {
+            if (out != null) out.close();
+            if (in != null) in.close();
+            if (socket != null) socket.close();
+            if (conn != null) conn.close();
+        } catch (IOException | SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
     public static void main(String[] args) {
+        Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+            public void run() {
+                cleanup();
+            }
+        }));
+
         try {
             conn = DatabaseUtil.getConnection();
         } catch (SQLException e) {
             e.printStackTrace();
             return;
         }
+
         // Create the main frame with Sign Up and Login options
         JFrame mainFrame = new JFrame("Chat Application");
         mainFrame.setSize(400, 300);
@@ -349,6 +367,8 @@ public class Main {
         joinedRoomsPanel.setLayout(new BoxLayout(joinedRoomsPanel, BoxLayout.Y_AXIS));
         mainMenuPanel.add(joinedRoomsPanel);
 
+        mainMenuPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+
         JLabel availableRoomsLabel = new JLabel("Available Rooms");
         availableRoomsLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
         mainMenuPanel.add(availableRoomsLabel);
@@ -370,19 +390,38 @@ public class Main {
             roomDetails.setAlignmentX(JLabel.CENTER_ALIGNMENT);
             roomPanel.add(roomDetails);
 
-            JButton actionButton = new JButton(room.isUserJoined() ? "Enter" : "Join");
-            actionButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
-            actionButton.addActionListener(new ActionListener() {
-                public void actionPerformed(ActionEvent e) {
-                    joinChatRoom(room);
-                }
-            });
-
-            roomPanel.add(actionButton);
-
             if (room.isUserJoined()) {
+                JButton enterButton = new JButton("Enter");
+                enterButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+                enterButton.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        showChatRoom(room.getName());
+                    }
+                });
+
+                JButton leaveButton = new JButton("Leave");
+                leaveButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+                leaveButton.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        leaveChatRoom(room.getName(), currentUser);
+                    }
+                });
+
+                roomPanel.add(enterButton);
+                roomPanel.add(leaveButton);
+
                 joinedRoomsPanel.add(roomPanel);
             } else {
+                JButton joinButton = new JButton("Join");
+                joinButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+                joinButton.addActionListener(new ActionListener() {
+                    public void actionPerformed(ActionEvent e) {
+                        joinChatRoom(room);
+                    }
+                });
+
+                roomPanel.add(joinButton);
+
                 availableRoomsPanel.add(roomPanel);
             }
         }
@@ -447,32 +486,13 @@ public class Main {
     }
 
     private static void joinChatRoom(ChatRoom room) {
-        if ("Private".equals(room.getStatus())) {
-            String password = JOptionPane.showInputDialog("Enter password for " + room.getName());
-            if (password == null || !room.getPassword().equals(password.trim())) {
-                JOptionPane.showMessageDialog(null, "Incorrect password or canceled.");
-                return;
-            }
-        }
+        // Send join request to the server (this should be implemented on the server-side)
+        out.println(currentUser + " has join " + room.getName());
 
-        // Check if the user is already a participant of the room
-        String checkQuery = "SELECT COUNT(*) FROM room_participants WHERE room_id = (SELECT id FROM chat_rooms WHERE name = ? LIMIT 1) AND username = ?";
-        try (PreparedStatement checkStmt = conn.prepareStatement(checkQuery)) {
-            checkStmt.setString(1, room.getName());
-            checkStmt.setString(2, currentUser);
-            ResultSet rs = checkStmt.executeQuery();
-            if (rs.next() && rs.getInt(1) > 0) {
-                // User is already a participant of the room
-                JOptionPane.showMessageDialog(null, "You are already a participant of this room.");
-                showChatRoom(room.getName());
-                return;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        // Add the current user to the room's participants list in the database
+        String query = "INSERT INTO room_participants (room_id, username) " +
+                "VALUES ((SELECT id FROM chat_rooms WHERE name = ?), ?)";
 
-        // Add the current user to the room participants in the database
-        String query = "INSERT INTO room_participants (room_id, username) VALUES ((SELECT id FROM chat_rooms WHERE name = ? LIMIT 1), ?)";
         try (PreparedStatement stmt = conn.prepareStatement(query)) {
             stmt.setString(1, room.getName());
             stmt.setString(2, currentUser);
@@ -481,11 +501,11 @@ public class Main {
             e.printStackTrace();
         }
 
-        // Update local userRooms map
-        userRooms.computeIfAbsent(currentUser, k -> new HashSet<>()).add(room.getName());
+        // Show a notification that the user has joined the room
+        JOptionPane.showMessageDialog(null, "You have joined the room: " + room.getName());
 
-        // Show the chat room
-        showChatRoom(room.getName());
+        // Refresh the main menu
+        showMainMenu();
     }
 
 
@@ -597,52 +617,93 @@ public class Main {
 
     private static void showChatRoom(String roomName) {
         JFrame chatRoomFrame = new JFrame("Chat Room: " + roomName);
-        chatRoomFrame.setSize(500, 400);
-        chatRoomFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        chatRoomFrame.setSize(600, 400);
+        chatRoomFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         chatRoomFrame.setLocationRelativeTo(null);
 
         JPanel chatRoomPanel = new JPanel();
-        chatRoomPanel.setLayout(new BorderLayout());
-        chatRoomFrame.add(chatRoomPanel);
+        chatRoomPanel.setLayout(new BoxLayout(chatRoomPanel, BoxLayout.Y_AXIS));
+        chatRoomFrame.add(new JScrollPane(chatRoomPanel));
 
-        JTextArea chatArea = new JTextArea();
+        JLabel roomLabel = new JLabel("Welcome to " + roomName);
+        roomLabel.setAlignmentX(JLabel.CENTER_ALIGNMENT);
+        chatRoomPanel.add(roomLabel);
+
+        // Add chat messages display area
+        JTextArea chatArea = new JTextArea(15, 50);
         chatArea.setEditable(false);
-        JScrollPane scrollPane = new JScrollPane(chatArea);
-        chatRoomPanel.add(scrollPane, BorderLayout.CENTER);
+        chatRoomPanel.add(new JScrollPane(chatArea));
 
+        // Add message input field and send button
         JTextField messageField = new JTextField();
-        chatRoomPanel.add(messageField, BorderLayout.SOUTH);
+        JButton sendButton = new JButton("Send");
+        JPanel messagePanel = new JPanel();
+        messagePanel.setLayout(new BoxLayout(messagePanel, BoxLayout.X_AXIS));
+        messagePanel.add(messageField);
+        messagePanel.add(sendButton);
+        chatRoomPanel.add(messagePanel);
 
-        messageField.addActionListener(new ActionListener() {
+        // Add leave room button
+        JButton leaveButton = new JButton("Leave Room");
+        leaveButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+        leaveButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                leaveChatRoom(roomName, currentUser);
+                chatRoomFrame.dispose();  // Close the chat room window
+                showMainMenu();  // Refresh and show the main menu
+            }
+        });
+        chatRoomPanel.add(leaveButton);
+
+        // Add action listener for the send button
+        sendButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 String message = messageField.getText();
-//                chatArea.append(currentUser + ": " + message + "\n");
-                messageField.setText("");
-                // Send message to the server here
-                out.println(currentUser + ": " + message);
+                if (!message.isEmpty()) {
+                    out.println(currentUser + ": " + message); // Send message to server
+                    chatArea.append("Me: " + message + "\n"); // Display message in chat area
+                    messageField.setText(""); // Clear the input field
+                }
             }
         });
 
-        chatRoomFrame.setVisible(true);
-
-        // Thread to read messages from the server and update the chat area
+// Start a thread to read messages from the server and update the chat area
         new Thread(new Runnable() {
             public void run() {
                 try {
                     String message;
                     while ((message = in.readLine()) != null) {
-                        final String finalMessage = message;
-                        SwingUtilities.invokeLater(new Runnable() {
-                            public void run() {
-                                chatArea.append(finalMessage + "\n");
-                            }
-                        });
+                        if (!message.startsWith(currentUser + ":")) {
+                            chatArea.append(message + "\n");
+                        }
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
         }).start();
+
+        chatRoomFrame.setVisible(true);
+    }
+
+    private static void leaveChatRoom(String roomName, String username) {
+        // Send leave request to the server (this should be implemented on the server-side)
+        out.println(username + " has left " + roomName);
+
+        // Remove the current user from the room's participants list in the database
+        String query = "DELETE FROM room_participants WHERE room_id = " +
+                "(SELECT id FROM chat_rooms WHERE name = ?) AND username = ?";
+
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, roomName);
+            stmt.setString(2, username);
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        // Refresh the main menu
+        showMainMenu();
     }
 
 
