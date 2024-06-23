@@ -655,6 +655,16 @@ public class Main {
         });
         chatRoomPanel.add(leaveButton);
 
+        // Add view participants button
+        JButton viewParticipantsButton = new JButton("View Participants");
+        viewParticipantsButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
+        viewParticipantsButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                viewParticipants(roomName);
+            }
+        });
+        chatRoomPanel.add(viewParticipantsButton);
+
         // Add action listener for the send button
         sendButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -667,7 +677,7 @@ public class Main {
             }
         });
 
-// Start a thread to read messages from the server and update the chat area
+        // Start a thread to read messages from the server and update the chat area
         new Thread(new Runnable() {
             public void run() {
                 try {
@@ -685,6 +695,27 @@ public class Main {
 
         chatRoomFrame.setVisible(true);
     }
+
+    private static void viewParticipants(String roomName) {
+        String query = "SELECT username FROM room_participants " +
+                "WHERE room_id = (SELECT id FROM chat_rooms WHERE name = ?)";
+
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setString(1, roomName);
+            ResultSet rs = stmt.executeQuery();
+
+            StringBuilder participants = new StringBuilder("Participants in " + roomName + ":\n");
+            while (rs.next()) {
+                participants.append(rs.getString("username")).append("\n");
+            }
+
+            // Display participants in a message dialog
+            JOptionPane.showMessageDialog(null, participants.toString(), "Participants", JOptionPane.INFORMATION_MESSAGE);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private static void leaveChatRoom(String roomName, String username) {
         // Send leave request to the server (this should be implemented on the server-side)
