@@ -450,7 +450,7 @@ public class Main {
                 enterButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
                 enterButton.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
-                        showChatRoom(room.getName());
+                        showChatRoom(room.getName(), mainMenuFrame);
                     }
                 });
 
@@ -459,6 +459,7 @@ public class Main {
                 leaveButton.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
                         leaveChatRoom(room.getName(), currentUser);
+                        mainMenuFrame.setVisible(false);
                     }
                 });
 
@@ -472,6 +473,7 @@ public class Main {
                 joinButton.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
                         joinChatRoom(room);
+                        mainMenuFrame.setVisible(false);
                     }
                 });
 
@@ -582,7 +584,7 @@ public class Main {
         JOptionPane.showMessageDialog(null, "You have joined the room: " + room.getName());
 
         // Refresh the main menu
-//        showMainMenu();
+        showMainMenu();
     }
 
 
@@ -668,7 +670,7 @@ public class Main {
                     JOptionPane.showMessageDialog(panel, "Room created successfully and joined.");
                     createRoomFrame.dispose();
                     createRoomFrame.dispatchEvent(new WindowEvent(createRoomFrame, WindowEvent.WINDOW_CLOSING));
-                    showMainMenu(); // Refresh main menu after creating and joining room
+//                    showMainMenu(); // Refresh main menu after creating and joining room
 //                    mainMenuFrame.dispatchEvent(new WindowEvent(mainMenuFrame, WindowEvent.WINDOW_CLOSING));
                 } catch (SQLException ex) {
                     JOptionPane.showMessageDialog(panel, "Failed to create room: " + ex.getMessage());
@@ -691,7 +693,7 @@ public class Main {
     }
 
 
-    private static void showChatRoom(String roomName) {
+    private static void showChatRoom(String roomName, JFrame mainMenuFrame) {
         JFrame chatRoomFrame = new JFrame("Chat Room: " + roomName);
         chatRoomFrame.setSize(600, 400);
         chatRoomFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Dispose on close to prevent exiting the application
@@ -724,7 +726,8 @@ public class Main {
                 leaveChatRoom(roomName, currentUser);
                 chatRoomFrame.dispose();
                 chatRoomFrame.dispatchEvent(new WindowEvent(chatRoomFrame, WindowEvent.WINDOW_CLOSING));
-                showMainMenu();
+//                showMainMenu();
+                mainMenuFrame.setVisible(false);
             }
         });
         chatRoomPanel.add(leaveButton);
@@ -746,9 +749,15 @@ public class Main {
                 chatRoomFrame.dispose();
                 chatRoomFrame.dispatchEvent(new WindowEvent(chatRoomFrame, WindowEvent.WINDOW_CLOSING));
                 showMainMenu(); // Go back to main menu
+                mainMenuFrame.setVisible(false);
             }
         });
         chatRoomPanel.add(backButton);
+
+        java.util.List<String> oldMessages = loadMessage(roomName);
+        for (String message : oldMessages) {
+            chatArea.append(message + "\n");
+        }
 
         sendButton.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
@@ -757,6 +766,7 @@ public class Main {
                     out.println(currentUser + ": " + message);
                     chatArea.append("Me: " + message + "\n");
                     messageField.setText("");
+                    createNewMessage(roomName, currentUser, message);
                 }
             }
         });
@@ -816,7 +826,7 @@ public class Main {
         chatRoomFrame.setVisible(true);
     }
 
-    private static java.util.List loadMessage(String roomName) {
+    private static java.util.List<String> loadMessage(String roomName) {
         String queryLoadMessage = "SELECT * FROM pesan WHERE id_room = (SELECT id FROM chat_rooms WHERE name = ?)";
 
         java.util.List<String> messages = new ArrayList<>();
@@ -835,6 +845,19 @@ public class Main {
         }
 
         return messages;
+    }
+
+    private static void createNewMessage(String roomName, String username, String chat) {
+        String queryCreateNewMessage = "INSERT INTO pesan (id_room, username, chat) VALUES ((SELECT id FROM chat_rooms WHERE name = ?), ?, ?)";
+
+        try (PreparedStatement stmt = conn.prepareStatement(queryCreateNewMessage)) {
+            stmt.setString(1, roomName);
+            stmt.setString(2, username);
+            stmt.setString(3, chat);
+            boolean rs = stmt.execute();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     private static void deleteChatRoom(String roomName) {
