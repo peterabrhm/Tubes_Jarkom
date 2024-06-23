@@ -357,6 +357,17 @@ public class Main {
         mainMenuPanel.setLayout(new BoxLayout(mainMenuPanel, BoxLayout.Y_AXIS));
         mainMenuFrame.add(new JScrollPane(mainMenuPanel));
 
+        JButton btnViewProfile = new JButton("View Profile");
+        btnViewProfile.setAlignmentX(JButton.RIGHT);
+        btnViewProfile.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                showUserProfile();
+            }
+        });
+        mainMenuPanel.add(btnViewProfile);
+
+
         JButton createRoomButton = new JButton("Create New Room");
         createRoomButton.setAlignmentX(JButton.CENTER_ALIGNMENT);
         mainMenuPanel.add(createRoomButton);
@@ -476,6 +487,27 @@ public class Main {
         mainMenuFrame.setVisible(true);
     }
 
+    private static void showUserProfile() {
+        try {
+            String query = "SELECT * FROM users WHERE username = ?";
+            PreparedStatement preparedStatement = conn.prepareStatement(query);
+            preparedStatement.setString(1, currentUser); // Ganti dengan username yang sesuai
+            ResultSet resultSet = preparedStatement.executeQuery();
+
+            if (resultSet.next()) {
+                String username = resultSet.getString("username");
+                // Tampilkan profil pengguna
+                JOptionPane.showMessageDialog(null, "Username: " + username);
+            } else {
+                JOptionPane.showMessageDialog(null, "Pengguna tidak ditemukan.");
+            }
+
+            resultSet.close();
+            preparedStatement.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
 
     private static java.util.List<String> fetchChatRooms() {
         java.util.List<String> chatRooms = new ArrayList<>();
